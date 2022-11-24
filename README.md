@@ -12,8 +12,9 @@ IMAP_USER=user@example.com
 IMAP_PASS=password
 
 # optional
-SEEN_BEFORE=7 # delete email that has been seen before 7 days
+SEEN_BEFORE=7    # delete email that has been seen before 7 days
 UNSEEN_BEFORE=15 # delete email that has been unseen before 15 days
+KEEP=30          # keep deleted email for 30 days
 ```
 
 ### service
