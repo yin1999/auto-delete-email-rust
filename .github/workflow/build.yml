@@ -1,0 +1,64 @@
+name: build
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+    - '.**'
+    - '!.github/workflows/build.yml'
+    - 'LICENSE'
+    - 'README.md'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+    - '.**'
+    - '!.github/workflows/build.yml'
+    - 'LICENSE'
+    - 'README.md'
+
+strategy:
+  matrix:
+    platform: [
+      { target: "x86_64-pc-windows-msvc", os: "windows-latest" },
+      { target: "x86_64-unknown-linux-gnu", os: "ubuntu-latest" },
+      { target: "x86_64-apple-darwin", os: "macos-latest" }
+    ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+
+    - name: Show rust env
+      run: |
+        rustc --version
+        cargo --version
+
+    - name: cache cargo
+      uses: actions/cache@v3
+      with:
+      path: |
+        ~/.cargo/bin/
+        ~/.cargo/registry/index/
+        ~/.cargo/registry/cache/
+        ~/.cargo/git/db/
+        target/
+      key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: install dependencies
+      if: runner.os != 'windows-latest'
+      run: |
+        # for linux
+        if [ "${{ runner.os }}" == "ubuntu-latest" ]; then
+          sudo apt-get update
+          sudo apt-get install libssl-dev -y
+        fi
+        # for macos
+        if [ "${{ runner.os }}" == "macos-latest" ]; then
+          brew install openssl
+        fi
+
+    - name: Build
+      run: cargo build --target ${{ matrix.platform.target }} --locked --verbose

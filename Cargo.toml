@@ -1,5 +1,5 @@
 [package]
-name = "auto-delete-email-rust"
+name = "auto-delete-email"
 version = "0.1.0"
 edition = "2021"
 
