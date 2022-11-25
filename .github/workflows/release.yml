@@ -46,12 +46,12 @@ jobs:
       if: runner.os != 'windows-latest'
       run: |
         # for linux
-        if [ "${{ runner.os }}" == "ubuntu-latest" ]; then
+        if [ "${{ runner.os }}" == "Linux" ]; then
           sudo apt-get update
           sudo apt-get install libssl-dev -y
         fi
         # for macos
-        if [ "${{ runner.os }}" == "macos-latest" ]; then
+        if [ "${{ runner.os }}" == "macOS" ]; then
           brew install openssl
         fi
 
@@ -61,13 +61,13 @@ jobs:
     
     - name: Rename binary
       run: |
-        from = "target/release/auto-delete-email"
-        if [ "${{ runner.os }}" == "windows-latest" ]; then
-          from = "${from}.exe"
+        asset = "target/release/auto-delete-email"
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          asset = "${asset}.exe"
         fi
 
         mkdir -p /tmp/release
-        zip -j /tmp/release/auto-delete-email-${{ matrix.platform.target }}.zip "${from}"
+        zip -j /tmp/release/auto-delete-email-${{ matrix.platform.target }}.zip "${asset}"
 
     - name: Upload artifact
       run: |

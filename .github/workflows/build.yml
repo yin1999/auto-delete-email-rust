@@ -50,12 +50,12 @@ jobs:
       if: runner.os != 'windows-latest'
       run: |
         # for linux
-        if [ "${{ runner.os }}" == "ubuntu-latest" ]; then
+        if [ "${{ runner.os }}" == "Linux" ]; then
           sudo apt-get update
           sudo apt-get install libssl-dev -y
         fi
         # for macos
-        if [ "${{ runner.os }}" == "macos-latest" ]; then
+        if [ "${{ runner.os }}" == "macOS" ]; then
           brew install openssl
         fi
 
