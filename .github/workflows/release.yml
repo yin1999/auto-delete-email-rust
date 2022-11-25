@@ -43,7 +43,7 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: install dependencies
-      if: runner.os != 'windows-latest'
+      if: runner.os != 'Windows'
       run: |
         # for linux
         if [ "${{ runner.os }}" == "Linux" ]; then
