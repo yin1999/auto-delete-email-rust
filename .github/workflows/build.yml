@@ -15,16 +15,15 @@ on:
     - 'LICENSE'
     - 'README.md'
 
-strategy:
-  matrix:
-    platform: [
-      { target: "x86_64-pc-windows-msvc", os: "windows-latest" },
-      { target: "x86_64-unknown-linux-gnu", os: "ubuntu-latest" },
-      { target: "x86_64-apple-darwin", os: "macos-latest" }
-    ]
-
 jobs:
   build:
+    strategy:
+      matrix:
+        platform: [
+          { target: "x86_64-pc-windows-msvc", os: "windows-latest" },
+          { target: "x86_64-unknown-linux-gnu", os: "ubuntu-latest" },
+          { target: "x86_64-apple-darwin", os: "macos-latest" }
+        ]
     name: Build
     runs-on: ${{ matrix.platform.os }}
     steps:
