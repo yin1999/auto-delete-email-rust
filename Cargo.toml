@@ -14,5 +14,4 @@ strip = true
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-native-tls = "0.2"
-imap = "2.4"
+imap = "3.0.0-alpha.14"

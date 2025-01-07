@@ -1,8 +1,7 @@
 use std::{collections::HashSet, env, fmt, io};
 
 use chrono::{DateTime, Duration, Local, TimeZone};
-use imap;
-use native_tls::TlsConnector;
+use imap::ClientBuilder;
 
 fn main() {
     print!("Starting...\n");
@@ -10,11 +9,16 @@ fn main() {
     let user = env::var("IMAP_USER").expect("IMAP_USER not set");
     let passwd = env::var("IMAP_PASS").expect("IMAP_PASS not set");
 
-    let domain = imap_server.split(":").next().unwrap();
+    let (domain, port) = if imap_server.contains(":") {
+        let mut iter = imap_server.split(':');
+        let domain = iter.next().unwrap();
+        let port = iter.next().unwrap().parse::<u16>().unwrap();
+        (domain, port)
+    } else {
+        (imap_server.as_str(), 993)
+    };
 
-    let tls = TlsConnector::builder().build().unwrap();
-
-    let client = imap::connect(&imap_server, domain, &tls).unwrap();
+    let client = ClientBuilder::new(domain, port).connect().unwrap();
 
     let sess = client.login(user, passwd);
 
