@@ -28,7 +28,7 @@ jobs:
     runs-on: ${{ matrix.platform.os }}
     steps:
     - name: Check out code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Show rust env
       run: |
