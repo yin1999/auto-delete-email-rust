@@ -126,8 +126,8 @@ impl<'a, T: io::Write + io::Read> ImapSess<'a, T> {
         }
     }
     fn delete_email(&mut self, date: &str, seen: bool) -> Result<(), AnyError> {
-        if !self.sess.select(self.select_mailbox)?.exists == 0 {
-            return Err(format!("Mailbox {} is empty", decode_utf7_imap(self.select_mailbox.to_string())).into());
+        if self.sess.select(self.select_mailbox)?.exists == 0 {
+            return Ok(());
         }
         let query = format!("BEFORE {} {}", date, if seen { "SEEN" } else { "UNSEEN" });
         let uids = self.sess.uid_search(query)?;
@@ -153,8 +153,8 @@ impl<'a, T: io::Write + io::Read> ImapSess<'a, T> {
 
     fn remove_deleted_email(&mut self, before: &str) -> Result<(), AnyError> {
         // search in Trash mailbox
-        if !self.sess.select(self.trash_mailbox)?.exists == 0 {
-            return Err(format!("Mailbox {} is empty", decode_utf7_imap(self.trash_mailbox.to_string())).into());
+        if self.sess.select(self.trash_mailbox)?.exists == 0 {
+            return Ok(());
         }
 
         let uids = self.sess.uid_search(format!("BEFORE {}", before))?;
