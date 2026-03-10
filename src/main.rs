@@ -1,10 +1,33 @@
-use std::{collections::HashSet, env, fmt, io};
+use std::{collections::HashSet, env, fmt, io, borrow::Cow};
 
 use chrono::{DateTime, Duration, Local, TimeZone};
 use imap::ClientBuilder;
+use utf7_imap::{decode_utf7_imap, encode_utf7_imap};
 
 fn main() {
-    print!("Starting...\n");
+    // check args
+    let args = env::args().collect::<Vec<String>>();
+    let show_mailbox = args.len() > 1 && matches!(args[1].as_str(), "show-mailbox");
+    if args.len() > 1 && !show_mailbox {
+        print!("Usage: auto-delete-email [command]
+Commands:
+  show-mailbox: show mailbox list
+Environment variables:
+  IMAP_SERVER: imap server address, e.g. imap.example.com or imap.example.com:993
+  IMAP_USER: imap user name
+  IMAP_PASS: imap password
+  SELECT_MAILBOX: mailbox to select, default is INBOX
+  TRASH_MAILBOX: mailbox to move deleted email to, default is Trash
+  SEEN_BEFORE: delete seen email before N days, default is 15
+  UNSEEN_BEFORE: delete unseen email before N days, default is 30
+  KEEP: keep deleted email for N days before remove, default is 30
+");
+        return;
+    }
+
+    if !show_mailbox {
+        print!("Starting...\n");
+    }
     let imap_server = env::var("IMAP_SERVER").expect("IMAP_SERVER not set");
     let user = env::var("IMAP_USER").expect("IMAP_USER not set");
     let passwd = env::var("IMAP_PASS").expect("IMAP_PASS not set");
@@ -29,13 +52,21 @@ fn main() {
         }
     };
 
-    let result = sess.select("INBOX").unwrap();
-    if result.exists == 0 {
-        print!("Done.\n");
+    if show_mailbox {
+        print!("Mailboxes:\n");
+        for mailbox in sess.list(None, Some("*")).unwrap().iter() {
+            print!("  {}\n", decode_utf7_imap(mailbox.name().to_string()));
+        }
         return;
     }
 
-    let mut sess = ImapSess::new(sess);
+    let select_mailbox = env::var("SELECT_MAILBOX").unwrap_or("INBOX".to_owned());
+    print!("Login success.\nSelecting mailbox: {}\n", select_mailbox);
+    let select_mailbox = encode_utf7_imap(select_mailbox);
+    let trash_mailbox = env::var("TRASH_MAILBOX").unwrap_or("Trash".to_owned());
+    let trash_mailbox = encode_utf7_imap(trash_mailbox);
+
+    let mut sess = ImapSess::new(sess, Cow::Owned(select_mailbox), Cow::Owned(trash_mailbox));
 
     let now = Local::now();
     let before = env::var("SEEN_BEFORE")
@@ -71,9 +102,11 @@ fn main() {
     print!("Done.\n");
 }
 
-struct ImapSess<T: io::Write + io::Read> {
+struct ImapSess<'a, T: io::Write + io::Read> {
     sess: imap::Session<T>,
     support_move: Option<bool>,
+    select_mailbox: Cow<'a, str>,
+    trash_mailbox: Cow<'a, str>,
 }
 
 fn format_date<TZ: TimeZone>(date: &DateTime<TZ>) -> String
@@ -83,14 +116,19 @@ where
     date.format("%d-%b-%Y").to_string()
 }
 
-impl<T: io::Write + io::Read> ImapSess<T> {
-    fn new(sess: imap::Session<T>) -> Self {
+impl<'a, T: io::Write + io::Read> ImapSess<'a, T> {
+    fn new(sess: imap::Session<T>, select_mailbox: Cow<'a, str>, trash_mailbox: Cow<'a, str>) -> Self {
         Self {
             sess,
             support_move: None,
+            select_mailbox,
+            trash_mailbox,
         }
     }
-    fn delete_email(&mut self, date: &str, seen: bool) -> Result<(), imap::Error> {
+    fn delete_email(&mut self, date: &str, seen: bool) -> Result<(), AnyError> {
+        if self.sess.select(self.select_mailbox.as_ref())?.exists == 0 {
+            return Ok(());
+        }
         let query = format!("BEFORE {} {}", date, if seen { "SEEN" } else { "UNSEEN" });
         let uids = self.sess.uid_search(query)?;
         if uids.is_empty() {
@@ -101,20 +139,21 @@ impl<T: io::Write + io::Read> ImapSess<T> {
             self.support_move = Some(capabilities.has_str("MOVE"));
         }
         let uid_set = Self::get_id_str(uids);
-        let mailbox_name = "Trash";
+        let mailbox_name = &self.trash_mailbox;
         if self.support_move.unwrap() {
-            self.sess.uid_mv(&uid_set, mailbox_name)
+            self.sess.uid_mv(&uid_set, mailbox_name)?;
         } else {
             // fallback to copy and delete
             self.sess.uid_copy(&uid_set, mailbox_name)?;
             self.sess.uid_store(&uid_set, "+FLAGS (\\Deleted)")?;
-            self.sess.expunge().map(|_| ())
+            self.sess.expunge().map(|_| ())?;
         }
+        Ok(())
     }
 
-    fn remove_deleted_email(&mut self, before: &str) -> Result<(), imap::Error> {
+    fn remove_deleted_email(&mut self, before: &str) -> Result<(), AnyError> {
         // search in Trash mailbox
-        if !self.sess.select("Trash")?.exists == 0 {
+        if self.sess.select(self.trash_mailbox.as_ref())?.exists == 0 {
             return Ok(());
         }
 
@@ -124,7 +163,8 @@ impl<T: io::Write + io::Read> ImapSess<T> {
         }
         let uid_set = Self::get_id_str(uids);
         self.sess.uid_store(&uid_set, "+FLAGS (\\Deleted)")?;
-        self.sess.expunge().map(|_| ())
+        self.sess.expunge().map(|_| ())?;
+        Ok(())
     }
 
     fn get_id_str(ids: HashSet<u32>) -> String {
@@ -152,5 +192,32 @@ impl<T: io::Write + io::Read> ImapSess<T> {
         }
         push(start, before);
         id_builder.join(",")
+    }
+}
+
+#[derive(Debug)]
+enum AnyError {
+    Imap(imap::Error),
+    Other(String),
+}
+
+impl From<imap::Error> for AnyError {
+    fn from(e: imap::Error) -> Self {
+        AnyError::Imap(e)
+    }
+}
+
+impl From<String> for AnyError {
+    fn from(s: String) -> Self {
+        AnyError::Other(s)
+    }
+}
+
+impl fmt::Display for AnyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AnyError::Imap(e) => write!(f, "Imap error: {}", e),
+            AnyError::Other(s) => write!(f, "{}", s),
+        }
     }
 }
